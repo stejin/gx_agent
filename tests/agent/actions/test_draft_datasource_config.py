@@ -15,7 +15,7 @@ from great_expectations_cloud.agent.actions.draft_datasource_config_action impor
 from great_expectations_cloud.agent.actions.utils import get_asset_names
 from great_expectations_cloud.agent.config import GxAgentEnvVars
 from great_expectations_cloud.agent.exceptions import ErrorCode, GXCoreError
-from great_expectations_cloud.agent.models import DraftDatasourceConfigEvent
+from great_expectations_cloud.agent.models import DomainContext, DraftDatasourceConfigEvent
 
 if TYPE_CHECKING:
     from pytest_mock import MockerFixture
@@ -61,12 +61,13 @@ def test_test_draft_datasource_config_success_non_sql_ds(
     datasource_config = {"type": "pandas", "name": "test-1-2-3"}
     config_id = UUID("df02b47c-e1b8-48a8-9aaa-b6ed9c49ffa5")
     org_id = UUID("81f4e105-e37d-4168-85a0-2526943f9956")
+    workspace_id = uuid.uuid4()
     env_vars = GxAgentEnvVars()
     action = DraftDatasourceConfigAction(
         context=mock_context,
         base_url="https://test-base-url",
         auth_key="",
-        organization_id=org_id,
+        domain_context=DomainContext(organization_id=org_id, workspace_id=workspace_id),
     )
 
     _get_asset_names_spy = mocker.patch(
@@ -76,10 +77,15 @@ def test_test_draft_datasource_config_success_non_sql_ds(
     _update_asset_names_list_spy = mocker.spy(action, "_update_asset_names_list")
 
     correlation_id = UUID("87657a8e-f65e-4e64-b21f-e83a54738b75")
-    event = DraftDatasourceConfigEvent(config_id=config_id, organization_id=uuid.uuid4())
+    # We track the workspace_id because we're pulling it from the event and pulling the organization_id from the env vars.
+    event = DraftDatasourceConfigEvent(
+        config_id=config_id,
+        organization_id=uuid.uuid4(),
+        workspace_id=workspace_id,
+    )
     expected_url: str = (
         f"{env_vars.gx_cloud_base_url}/api/v1/organizations/{env_vars.gx_cloud_organization_id}"
-        f"/draft-datasources/{config_id}"
+        f"/workspaces/{event.workspace_id}/draft-datasources/{config_id}"
     )
 
     responses.get(
@@ -130,14 +136,20 @@ def test_test_draft_datasource_config_success_sql_ds(
     mock_inspector = inspect.return_value
     mock_inspector.get_table_names.return_value = table_names
     mock_inspector.get_view_names.return_value = view_names
+    dialect = mocker.Mock()
+    mock_inspector.dialect = dialect
+    identifier_preparer = mocker.Mock()
+    mock_inspector.dialect.identifier_preparer = identifier_preparer
+    identifier_preparer.quote.side_effect = table_names + view_names
 
     env_vars = GxAgentEnvVars()
     org_id = UUID("81f4e105-e37d-4168-85a0-2526943f9956")
+    workspace_id = uuid.uuid4()
     action = DraftDatasourceConfigAction(
         context=mock_context,
         base_url="https://test-base-url",
         auth_key="",
-        organization_id=org_id,
+        domain_context=DomainContext(organization_id=org_id, workspace_id=workspace_id),
     )
 
     # add spies to the action methods
@@ -148,15 +160,19 @@ def test_test_draft_datasource_config_success_sql_ds(
     _update_asset_names_list_spy = mocker.spy(action, "_update_asset_names_list")
 
     correlation_id = UUID("87657a8e-f65e-4e64-b21f-e83a54738b75")
-    event = DraftDatasourceConfigEvent(config_id=config_id, organization_id=uuid.uuid4())
+    event = DraftDatasourceConfigEvent(
+        config_id=config_id,
+        organization_id=uuid.uuid4(),
+        workspace_id=workspace_id,
+    )
     expected_url_get: str = (
         f"{env_vars.gx_cloud_base_url}/api/v1/organizations/{env_vars.gx_cloud_organization_id}"
-        f"/draft-datasources/{config_id}"
+        f"/workspaces/{event.workspace_id}/draft-datasources/{config_id}"
     )
 
     expected_url_put: str = (
         f"{env_vars.gx_cloud_base_url}/api/v1/organizations/{env_vars.gx_cloud_organization_id}"
-        f"/draft-table-names/{config_id}"
+        f"/workspaces/{event.workspace_id}/draft-table-names/{config_id}"
     )
 
     responses.get(
@@ -218,27 +234,37 @@ def test_test_draft_datasource_config_sql_ds_raises_on_patch_failure(
     mock_inspector = inspect.return_value
     mock_inspector.get_table_names.return_value = table_names
     mock_inspector.get_view_names.return_value = view_names
+    dialect = mocker.Mock()
+    mock_inspector.dialect = dialect
+    identifier_preparer = mocker.Mock()
+    mock_inspector.dialect.identifier_preparer = identifier_preparer
+    identifier_preparer.quote.side_effect = table_names + view_names
 
     env_vars = GxAgentEnvVars()
     org_id = UUID("81f4e105-e37d-4168-85a0-2526943f9956")
+    workspace_id = uuid.uuid4()
     action = DraftDatasourceConfigAction(
         context=mock_context,
         base_url="https://test-base-url",
         auth_key="",
-        organization_id=org_id,
+        domain_context=DomainContext(organization_id=org_id, workspace_id=workspace_id),
     )
 
     correlation_id = UUID("87657a8e-f65e-4e64-b21f-e83a54738b75")
-    event = DraftDatasourceConfigEvent(config_id=config_id, organization_id=uuid.uuid4())
+    event = DraftDatasourceConfigEvent(
+        config_id=config_id,
+        organization_id=uuid.uuid4(),
+        workspace_id=workspace_id,
+    )
 
     expected_url_get: str = (
         f"{env_vars.gx_cloud_base_url}/api/v1/organizations/{env_vars.gx_cloud_organization_id}"
-        f"/draft-datasources/{config_id}"
+        f"/workspaces/{event.workspace_id}/draft-datasources/{config_id}"
     )
 
     expected_url_put: str = (
         f"{env_vars.gx_cloud_base_url}/api/v1/organizations/{env_vars.gx_cloud_organization_id}"
-        f"/draft-table-names/{config_id}"
+        f"/workspaces/{event.workspace_id}/draft-table-names/{config_id}"
     )
     responses.get(
         url=expected_url_get,
@@ -270,17 +296,22 @@ def test_test_draft_datasource_config_failure(
     env_vars = GxAgentEnvVars()
     base_url = "https://test-base-url"
     org_id = UUID("81f4e105-e37d-4168-85a0-2526943f9956")
+    workspace_id = uuid.uuid4()
     action = DraftDatasourceConfigAction(
         context=mock_context,
         base_url=base_url,
         auth_key="",
-        organization_id=org_id,
+        domain_context=DomainContext(organization_id=org_id, workspace_id=workspace_id),
     )
     correlation_id = UUID("87657a8e-f65e-4e64-b21f-e83a54738b75")
-    event = DraftDatasourceConfigEvent(config_id=config_id, organization_id=uuid.uuid4())
+    event = DraftDatasourceConfigEvent(
+        config_id=config_id,
+        organization_id=uuid.uuid4(),
+        workspace_id=workspace_id,
+    )
     expected_url = (
         f"{env_vars.gx_cloud_base_url}/api/v1/organizations/{env_vars.gx_cloud_organization_id}"
-        f"/draft-datasources/{config_id}"
+        f"/workspaces/{event.workspace_id}/draft-datasources/{config_id}"
     )
     datasource_cls = mocker.Mock(autospec=SQLDatasource)
     mock_context.data_sources.type_lookup = {ds_type: datasource_cls}
@@ -303,17 +334,22 @@ def test_test_draft_datasource_config_raises_for_non_fds(mock_context, set_requi
     env_vars = GxAgentEnvVars()
     base_url = "https://test-base-url"
     org_id = UUID("81f4e105-e37d-4168-85a0-2526943f9956")
+    workspace_id = uuid.uuid4()
     action = DraftDatasourceConfigAction(
         context=mock_context,
         base_url=base_url,
         auth_key="",
-        organization_id=org_id,
+        domain_context=DomainContext(organization_id=org_id, workspace_id=workspace_id),
     )
     correlation_id = UUID("87657a8e-f65e-4e64-b21f-e83a54738b75")
-    event = DraftDatasourceConfigEvent(config_id=config_id, organization_id=uuid.uuid4())
+    event = DraftDatasourceConfigEvent(
+        config_id=config_id,
+        organization_id=uuid.uuid4(),
+        workspace_id=workspace_id,
+    )
     expected_url = (
         f"{env_vars.gx_cloud_base_url}/api/v1/organizations/{env_vars.gx_cloud_organization_id}"
-        f"/draft-datasources/{config_id}"
+        f"/workspaces/{event.workspace_id}/draft-datasources/{config_id}"
     )
     responses.get(
         url=expected_url,
@@ -341,18 +377,23 @@ def test_draft_datasource_config_failure_raises_correct_gx_core_error(
 ):
     base_url = "https://test-base-url"
     org_id = UUID("81f4e105-e37d-4168-85a0-2526943f9956")
+    workspace_id = uuid.uuid4()
     action = DraftDatasourceConfigAction(
         context=mock_context,
         base_url=base_url,
         auth_key="",
-        organization_id=org_id,
+        domain_context=DomainContext(organization_id=org_id, workspace_id=workspace_id),
     )
     mock_check_draft_datasource_config = mocker.patch(
         f"{DraftDatasourceConfigAction.__module__}.{DraftDatasourceConfigAction.__name__}.check_draft_datasource_config"
     )
     mock_check_draft_datasource_config.side_effect = TestConnectionError(error_message)
 
-    event = DraftDatasourceConfigEvent(config_id=uuid.uuid4(), organization_id=uuid.uuid4())
+    event = DraftDatasourceConfigEvent(
+        config_id=uuid.uuid4(),
+        organization_id=uuid.uuid4(),
+        workspace_id=workspace_id,
+    )
     with pytest.raises(GXCoreError) as e:
         action.run(event=event, id=str(uuid.uuid4()))
 
@@ -370,17 +411,22 @@ def test_test_draft_datasource_config_raises_for_unknown_type(
     env_vars = GxAgentEnvVars()
     base_url = "https://test-base-url"
     org_id = UUID("81f4e105-e37d-4168-85a0-2526943f9956")
+    workspace_id = uuid.uuid4()
     action = DraftDatasourceConfigAction(
         context=mock_context,
         base_url=base_url,
         auth_key="",
-        organization_id=org_id,
+        domain_context=DomainContext(organization_id=org_id, workspace_id=workspace_id),
     )
     correlation_id = UUID("87657a8e-f65e-4e64-b21f-e83a54738b75")
-    event = DraftDatasourceConfigEvent(config_id=config_id, organization_id=uuid.uuid4())
+    event = DraftDatasourceConfigEvent(
+        config_id=config_id,
+        organization_id=uuid.uuid4(),
+        workspace_id=workspace_id,
+    )
     expected_url = (
         f"{env_vars.gx_cloud_base_url}/api/v1/organizations/{env_vars.gx_cloud_organization_id}"
-        f"/draft-datasources/{config_id}"
+        f"/workspaces/{event.workspace_id}/draft-datasources/{config_id}"
     )
 
     mock_context.data_sources.type_lookup = {}
@@ -404,17 +450,22 @@ def test_test_draft_datasource_config_raises_for_cloud_backend_error(
     env_vars = GxAgentEnvVars()
     base_url = "https://test-base-url"
     org_id = UUID("81f4e105-e37d-4168-85a0-2526943f9956")
+    workspace_id = uuid.uuid4()
     action = DraftDatasourceConfigAction(
         context=mock_context,
         base_url=base_url,
         auth_key="",
-        organization_id=org_id,
+        domain_context=DomainContext(organization_id=org_id, workspace_id=workspace_id),
     )
     correlation_id = UUID("87657a8e-f65e-4e64-b21f-e83a54738b75")
-    event = DraftDatasourceConfigEvent(config_id=config_id, organization_id=uuid.uuid4())
+    event = DraftDatasourceConfigEvent(
+        config_id=config_id,
+        organization_id=uuid.uuid4(),
+        workspace_id=workspace_id,
+    )
     expected_url = (
         f"{env_vars.gx_cloud_base_url}/api/v1/organizations/{env_vars.gx_cloud_organization_id}"
-        f"/draft-datasources/{config_id}"
+        f"/workspaces/{event.workspace_id}/draft-datasources/{config_id}"
     )
 
     responses.get(

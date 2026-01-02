@@ -15,8 +15,11 @@ from pydantic import v1 as pydantic_v1
 from great_expectations_cloud.agent.actions.unknown import UnknownEventAction
 from great_expectations_cloud.agent.exceptions import GXAgentError
 from great_expectations_cloud.agent.models import (
+    DomainContext,
     Event,
+    EventType,
     UnknownEvent,
+    get_event_union,
 )
 
 if TYPE_CHECKING:
@@ -44,7 +47,7 @@ _EVENT_ACTION_MAP: dict[str, dict[str, type[AgentAction[Any]]]] = defaultdict(di
 
 
 def register_event_action(
-    version: str, event_type: type[Event], action_class: type[AgentAction[Any]]
+    version: str, event_type: EventType, action_class: type[AgentAction[Any]]
 ) -> None:
     """Register an event type to an action class."""
     if version in _EVENT_ACTION_MAP and event_type.__name__ in _EVENT_ACTION_MAP[version]:
@@ -65,11 +68,11 @@ class EventHandler:
         self._context = context
 
     def get_event_action(
-        self, event: Event, base_url: str, auth_key: str, organization_id: UUID
+        self, event: Event, base_url: str, auth_key: str, domain_context: DomainContext
     ) -> AgentAction[Any]:
         """Get the action that should be run for the given event."""
 
-        if not self._check_event_organization_id(event, organization_id):
+        if not self._check_event_organization_id(event, domain_context.organization_id):
             # Making message more generic
             raise GXAgentError("Unable to process job. Invalid input.")  # noqa: TRY003
 
@@ -82,17 +85,17 @@ class EventHandler:
         return action_class(
             context=self._context,
             base_url=base_url,
-            organization_id=organization_id,
+            domain_context=domain_context,
             auth_key=auth_key,
         )
 
-    def handle_event(  # Refactor opportunity
-        self, event: Event, id: str, base_url: str, auth_key: str, organization_id: UUID
+    def handle_event(
+        self, event: Event, id: str, base_url: str, auth_key: str, domain_context: DomainContext
     ) -> ActionResult:
-        start_time = datetime.now(tz=timezone.utc)
         """Transform an Event into an ActionResult."""
+        start_time = datetime.now(tz=timezone.utc)
         action = self.get_event_action(
-            event=event, base_url=base_url, auth_key=auth_key, organization_id=organization_id
+            event=event, base_url=base_url, auth_key=auth_key, domain_context=domain_context
         )
         LOGGER.info(f"Handling event: {event.type} -> {action.__class__.__name__}")
         action_result = action.run(event=event, id=id)
@@ -102,8 +105,9 @@ class EventHandler:
 
     @classmethod
     def parse_event_from(cls, msg_body: bytes) -> Event:
+        event_union = get_event_union()
         try:
-            event: Event = pydantic_v1.parse_raw_as(Event, msg_body)  # type: ignore[arg-type] # FIXME
+            event: Event = pydantic_v1.parse_raw_as(event_union, msg_body)
         except (pydantic_v1.ValidationError, JSONDecodeError):
             # Log as bytes
             LOGGER.exception("Unable to parse event type", extra={"msg_body": f"{msg_body!r}"})

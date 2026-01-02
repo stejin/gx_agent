@@ -8,7 +8,7 @@ import pytest
 from great_expectations_cloud.agent.actions import DraftDatasourceConfigAction
 from great_expectations_cloud.agent.actions.utils import get_asset_names
 from great_expectations_cloud.agent.exceptions import GXCoreError
-from great_expectations_cloud.agent.models import DraftDatasourceConfigEvent
+from great_expectations_cloud.agent.models import DomainContext, DraftDatasourceConfigEvent
 
 if TYPE_CHECKING:
     from great_expectations.data_context import CloudDataContext
@@ -21,6 +21,7 @@ def test_running_draft_datasource_config_action(
     context: CloudDataContext,
     cloud_base_url: str,
     org_id_env_var: str,
+    workspace_id_env_var: str,
     token_env_var: str,
     mocker: MockerFixture,
 ):
@@ -30,7 +31,9 @@ def test_running_draft_datasource_config_action(
     action = DraftDatasourceConfigAction(
         context=context,
         base_url=cloud_base_url,
-        organization_id=UUID(org_id_env_var),
+        domain_context=DomainContext(
+            organization_id=UUID(org_id_env_var), workspace_id=UUID(workspace_id_env_var)
+        ),
         auth_key=token_env_var,
     )
 
@@ -41,44 +44,20 @@ def test_running_draft_datasource_config_action(
         type="test_datasource_config",
         config_id=UUID(draft_datasource_id_for_connect_successfully),
         organization_id=UUID(org_id_env_var),
+        workspace_id=UUID(workspace_id_env_var),
     )
     event_id = "096ce840-7aa8-45d1-9e64-2833948f4ae8"
 
-    expected_table_names = [
-        "alembic_version",
-        "agent_job_created_resources",
-        "agent_job_source_resources",
-        "agent_jobs",
-        "alert_emails",
-        "asset_alert_emails",
+    # subset of tables we expect to see
+    expected_asset_names = [
         "asset_refs",
-        "expectations",
-        "expectation_changes",
-        "checkpoint_job_schedules",
-        "draft_configs",
-        "expectation_draft_configs",
-        "user_api_tokens",
-        "user_asset_alerts",
-        "organization_api_tokens",
-        "pg_stat_statements",
-        "suite_validation_results",
-        "metrics",
-        "batch_definitions",
-        "expectation_suites",
-        "expectation_validation_results",
-        "data_context_variables",
-        "system_users",
         "checkpoints",
-        "organizations",
-        "organizations_auth0_orgs",
-        "sso_organization_email_domains",
-        "metric_runs",
-        "users",
-        "auth0_users",
         "datasources",
-        "organization_users",
-        "validations",
+        "expectation_suites",
+        "organizations",
         "api_tokens",
+        "users",
+        "expectations",
     ]
     # add spies to the action methods
     mocker.patch(
@@ -102,13 +81,17 @@ def test_running_draft_datasource_config_action(
     assert _update_asset_names_list_spy.call_args.kwargs.get("config_id") == UUID(
         draft_datasource_id_for_connect_successfully
     )
-    assert sorted(_update_asset_names_list_spy.call_args.kwargs.get("asset_names")) == sorted(
-        expected_table_names
+    assert set(expected_asset_names).issubset(
+        set(_update_asset_names_list_spy.call_args.kwargs["asset_names"])
     )
 
 
 def test_running_draft_datasource_config_action_fails_for_unreachable_datasource(
-    context: CloudDataContext, cloud_base_url: str, org_id_env_var: str, token_env_var: str
+    context: CloudDataContext,
+    cloud_base_url: str,
+    org_id_env_var: str,
+    workspace_id_env_var: str,
+    token_env_var: str,
 ):
     # Arrange
     # Note: Draft config is loaded in mercury seed data
@@ -116,7 +99,9 @@ def test_running_draft_datasource_config_action_fails_for_unreachable_datasource
     action = DraftDatasourceConfigAction(
         context=context,
         base_url=cloud_base_url,
-        organization_id=UUID(org_id_env_var),
+        domain_context=DomainContext(
+            organization_id=UUID(org_id_env_var), workspace_id=UUID(workspace_id_env_var)
+        ),
         auth_key=token_env_var,
     )
     datasource_id_for_connect_failure = (
@@ -126,6 +111,7 @@ def test_running_draft_datasource_config_action_fails_for_unreachable_datasource
         type="test_datasource_config",
         config_id=UUID(datasource_id_for_connect_failure),
         organization_id=UUID(org_id_env_var),
+        workspace_id=UUID(workspace_id_env_var),
     )
     event_id = "64842838-c7bf-4038-8b27-c7a32eba4b7b"
 

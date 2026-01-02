@@ -70,7 +70,7 @@ class DraftDatasourceConfigAction(AgentAction[DraftDatasourceConfigEvent]):
         with create_session(access_token=self._auth_key) as session:
             url = urljoin(
                 base=self._base_url,
-                url=f"/api/v1/organizations/{self._organization_id}/draft-table-names/{config_id}",
+                url=f"/api/v1/organizations/{self._domain_context.organization_id}/workspaces/{self._domain_context.workspace_id}/draft-table-names/{config_id}",
             )
             response = session.put(
                 url=url,
@@ -87,7 +87,7 @@ class DraftDatasourceConfigAction(AgentAction[DraftDatasourceConfigEvent]):
     def get_draft_config(self, config_id: UUID) -> dict[str, Any]:
         resource_url = urljoin(
             base=self._base_url,
-            url=f"/api/v1/organizations/{self._organization_id}/draft-datasources/{config_id}",
+            url=f"/api/v1/organizations/{self._domain_context.organization_id}/workspaces/{self._domain_context.workspace_id}/draft-datasources/{config_id}",
         )
         with create_session(access_token=self._auth_key) as session:
             response = session.get(resource_url)

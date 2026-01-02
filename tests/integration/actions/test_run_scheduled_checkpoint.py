@@ -8,6 +8,7 @@ import pytest
 from great_expectations import Checkpoint, ValidationDefinition
 
 from great_expectations_cloud.agent.models import (
+    DomainContext,
     RunScheduledCheckpointEvent,
 )
 
@@ -73,6 +74,7 @@ def checkpoint_event(scheduled_checkpoint, datasource_names_to_asset_names, org_
         schedule_id=uuid.UUID("e37cc13f-141d-4818-93c2-e3ec60024683"),
         datasource_names_to_asset_names=datasource_names_to_asset_names,
         organization_id=uuid.UUID(org_id_env_var),
+        workspace_id=uuid.uuid4(),
     )
 
 
@@ -80,10 +82,13 @@ def checkpoint_event(scheduled_checkpoint, datasource_names_to_asset_names, org_
 def test_running_checkpoint_action(
     context, checkpoint_event, cloud_base_url: str, org_id_env_var: str, token_env_var: str
 ):
+    workspace_id_env_var = uuid.uuid4()
     action = RunScheduledCheckpointAction(
         context=context,
         base_url=cloud_base_url,
-        organization_id=uuid.UUID(org_id_env_var),
+        domain_context=DomainContext(
+            organization_id=uuid.UUID(org_id_env_var), workspace_id=workspace_id_env_var
+        ),
         auth_key=token_env_var,
     )
     event_id = "096ce840-7aa8-45d1-9e64-2833948f4ae8"
@@ -116,6 +121,7 @@ def test_checkpoint_event_with_name():
         schedule_id=uuid.uuid4(),
         datasource_names_to_asset_names={},
         organization_id=uuid.uuid4(),
+        workspace_id=uuid.uuid4(),
         checkpoint_id=uuid.uuid4(),
     )
     assert checkpoint_event.checkpoint_name == "my_checkpoint"

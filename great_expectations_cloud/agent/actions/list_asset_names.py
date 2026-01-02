@@ -13,9 +13,7 @@ from great_expectations_cloud.agent.actions.agent_action import (
 )
 from great_expectations_cloud.agent.actions.utils import get_asset_names
 from great_expectations_cloud.agent.event_handler import register_event_action
-from great_expectations_cloud.agent.models import (
-    ListAssetNamesEvent,
-)
+from great_expectations_cloud.agent.models import ListAssetNamesEvent
 
 
 class ListAssetNamesAction(AgentAction[ListAssetNamesEvent]):
@@ -34,7 +32,8 @@ class ListAssetNamesAction(AgentAction[ListAssetNamesEvent]):
         asset_names = get_asset_names(datasource)
 
         self._add_or_update_asset_names_list(
-            datasource_id=str(datasource.id), asset_names=asset_names
+            datasource_id=str(datasource.id),
+            asset_names=asset_names,
         )
 
         return ActionResult(
@@ -47,7 +46,7 @@ class ListAssetNamesAction(AgentAction[ListAssetNamesEvent]):
         with create_session(access_token=self._auth_key) as session:
             url = urljoin(
                 base=self._base_url,
-                url=f"/api/v1/organizations/{self._organization_id}/table-names/{datasource_id}",
+                url=f"/api/v1/organizations/{self._domain_context.organization_id}/workspaces/{self._domain_context.workspace_id}/table-names/{datasource_id}",
             )
             response = session.put(
                 url=url,
